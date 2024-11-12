@@ -4,7 +4,7 @@
 Summary: Software version of a PKCS#11 Hardware Security Module
 Name: softhsm
 Version: 2.6.1
-Release: %{?prever:0.}7%{?prever:.%{prever}}%{?dist}.2
+Release: %{?prever:0.}10%{?prever:.%{prever}}%{?dist}
 License: BSD
 Url: http://www.opendnssec.org/
 Source: http://dist.opendnssec.org/source/%{?prever:testing/}%{name}-%{version}.tar.gz
@@ -12,6 +12,11 @@ Source1: http://dist.opendnssec.org/source/%{?prever:testing/}%{name}-%{version}
 
 Patch1: softhsm-2.6.1-rh1831086-exit.patch
 Patch2: softhsm-openssl3-tests.patch
+# based on https://github.com/opendnssec/SoftHSMv2/commit/f94aaffc879ade97a51b8e1308af42f86be1885f
+Patch3: softhsm-2.6.1-uninitialized.patch
+# from https://github.com/Emantor/SoftHSMv2/tree/fix/openssl3
+# as discussed at https://github.com/opendnssec/SoftHSMv2/issues/729
+Patch4: softhsm-prevent-global-deleted-objects-access.patch
 
 BuildRequires: make
 BuildRequires: openssl-devel >= 1.0.1k-6, sqlite-devel >= 3.4.2, cppunit-devel
@@ -45,6 +50,8 @@ The devel package contains the libsofthsm include files
 %setup -q -n %{name}-%{version}%{?prever}
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
+%patch4 -p1
 
 %if 0%{?prever:1} || 0%{?prerelease:1}
    # pre-release or post-release snapshots fixup
@@ -67,7 +74,19 @@ autoreconf -fiv
 %make_build
 
 %check
-make check
+for d in crypto data_mgr handle_mgr object_store session_mgr slot_mgr ; do
+make check  -C src/lib/$d
+done
+
+pushd src/lib/test
+make p11test
+for t in TokenTests AsymWrapUnwrapTests DigestTests ForkTests \
+         InitTests InfoTests SessionTests UserTests RandomTests \
+         SignVerifyTests AsymEncryptDecryptTests DeriveTests \
+         ObjectTests SymmetricAlgorithmTests ; do
+./p11test $t
+done
+popd
 
 %install
 rm -rf %{buildroot}
@@ -118,6 +137,17 @@ if [ -f /var/softhsm/slot0.db ]; then
 fi
 
 %changelog
+* Tue Apr 09 2024 Alexander Bokovoy <abokovoy@redhat.com> - 2.6.1-10
+- Revert SPDX license change as RHEL 9 does not use it
+
+* Fri Feb 09 2024 Alexander Bokovoy <abokovoy@redhat.com> - 2.6.1-9
+- Prevent access to global C++ variables once they destroyed
+- Patch from Neil Horman (OpenSSL)
+
+* Thu Feb 08 2024 Alexander Bokovoy <abokovoy@redhat.com> - 2.6.1-8
+- Run p11test tests individually
+- Resolves: rhbz#2261703
+
 * Tue Aug 10 2021 Mohan Boddu <mboddu@redhat.com> - 2.6.1-7.2
 - Rebuilt for IMA sigs, glibc 2.34, aarch64 flags
   Related: rhbz#1991688
