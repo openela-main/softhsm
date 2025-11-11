@@ -4,11 +4,12 @@
 Summary: Software version of a PKCS#11 Hardware Security Module
 Name: softhsm
 Version: 2.6.1
-Release: %{?prever:0.}10%{?prever:.%{prever}}%{?dist}
+Release: %{?prever:0.}11%{?prever:.%{prever}}%{?dist}
 License: BSD
 Url: http://www.opendnssec.org/
 Source: http://dist.opendnssec.org/source/%{?prever:testing/}%{name}-%{version}.tar.gz
 Source1: http://dist.opendnssec.org/source/%{?prever:testing/}%{name}-%{version}.tar.gz.sig
+Source2: softhsm-sysusers.conf
 
 Patch1: softhsm-2.6.1-rh1831086-exit.patch
 Patch2: softhsm-openssl3-tests.patch
@@ -42,16 +43,17 @@ Requires: %{name} = %{version}-%{release}, openssl-devel, sqlite-devel
 %if 0%{?prever:1} || 0%{?prerelease:1}
 BuildRequires: autoconf, libtool, automake
 %endif
+BuildRequires: systemd-rpm-macros
 
 %description devel
 The devel package contains the libsofthsm include files
 
 %prep
 %setup -q -n %{name}-%{version}%{?prever}
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
+%patch -P 1 -p1
+%patch -P 2 -p1
+%patch -P 3 -p1
+%patch -P 4 -p1
 
 %if 0%{?prever:1} || 0%{?prerelease:1}
    # pre-release or post-release snapshots fixup
@@ -88,14 +90,19 @@ for t in TokenTests AsymWrapUnwrapTests DigestTests ForkTests \
 done
 popd
 
+%pre
+%sysusers_create_package %{name} %{SOURCE2}
+
 %install
 rm -rf %{buildroot}
 %make_install
 
+install -D %{SOURCE2} %{buildroot}/%{_sysusersdir}/%{name}.conf
+
 rm %{buildroot}/%{_sysconfdir}/softhsm2.conf.sample
 rm -f %{buildroot}/%{_libdir}/pkcs11/*a
-mkdir -p %{buildroot}%{_includedir}/softhsm
-cp src/lib/*.h %{buildroot}%{_includedir}/softhsm
+mkdir -p %{buildroot}/%{_includedir}/softhsm
+cp src/lib/*.h %{buildroot}/%{_includedir}/softhsm
 mkdir -p %{buildroot}/%{_sharedstatedir}/softhsm/tokens
 
 # leave a softlink where softhsm-1 installed its library. Programs like
@@ -117,17 +124,11 @@ ln -s ../pkcs11/libsofthsm2.so %{buildroot}/%{_libdir}/softhsm/libsofthsm.so
 %attr(1770,ods,ods) %dir %{_sharedstatedir}/softhsm/tokens
 %doc LICENSE README.md NEWS
 %{_mandir}/*/*
+%{_sysusersdir}/%{name}.conf
 
 %files devel
 %attr(0755,root,root) %dir %{_includedir}/softhsm
 %{_includedir}/softhsm/*.h
-
-%pre
-getent group ods >/dev/null || groupadd -r ods
-getent passwd ods >/dev/null || \
-    useradd -r -g ods -d %{_sharedstatedir}/softhsm -s /sbin/nologin \
-    -c "softhsm private keys owner" ods
-exit 0
 
 %post
 
@@ -137,6 +138,10 @@ if [ -f /var/softhsm/slot0.db ]; then
 fi
 
 %changelog
+* Tue Jul 22 2025 Rafael Jeffman <rjeffman@redhat.com> - 2.6.1-11
+- Use systemd-sysusers
+  Resolves: RHEL-76028
+
 * Tue Apr 09 2024 Alexander Bokovoy <abokovoy@redhat.com> - 2.6.1-10
 - Revert SPDX license change as RHEL 9 does not use it
 
@@ -361,4 +366,4 @@ fi
 - Upgraded to 1.3.0
 
 * Thu Mar  3 2011 Paul Wouters <paul@xelerance.com> - 1.2.0-1
-- Initial package for Fedora 
+- Initial package for Fedora
